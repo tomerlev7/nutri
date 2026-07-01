@@ -2211,8 +2211,6 @@ export default function App() {
       setTemplates(src.templates  || tmpl);
       setShortGoals(src.shortGoals|| sg);
       setMyFoods(  src.myFoods    || mf);
-      setSaveStatus(kv ? "saved" : (Object.keys(f).length>0 ? "saved" : ""));
-      setTimeout(()=>setSaveStatus(""), 3000);
       setReady(true);
     })();
   },[]);
@@ -2268,7 +2266,6 @@ export default function App() {
                       if (d.templates)  { setTemplates(d.templates); db.set("nt_templates",  d.templates); }
                       if (d.myFoods)    { setMyFoods(d.myFoods);     db.set("nt_myFoods",    d.myFoods); }
                       if (d.shortGoals) { setShortGoals(d.shortGoals); db.set("nt_shortGoals",d.shortGoals); }
-                      setSaveStatus("saved"); setTimeout(()=>setSaveStatus(""),2000);
                       alert(`✅ נתונים יובאו בהצלחה!\nנשמר: ${d._exported?.slice(0,10) || "לא ידוע"}`);
                     } catch { alert("שגיאה בקריאת הקובץ"); }
                     e.target.value = "";
