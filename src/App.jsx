@@ -27,7 +27,20 @@ const WORKOUT_TYPES = {
 const SWIM_STYLES = ["חופשי","חזה","גב","פרפר","מעורב"];
 
 // ══ Storage ════════════════════════════════════════════════════════════
+// ── Sync ID (only thing stored locally — everything else goes to KV) ──
+const getUID = () => {
+  let uid = localStorage.getItem('nutri_uid');
+  if (!uid) {
+    uid = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Date.now().toString(36) + Math.random().toString(36).slice(2);
+    localStorage.setItem('nutri_uid', uid);
+  }
+  return uid;
+};
+
 const db = {
+  // localStorage for instant local access
   get: async (k, fb) => {
     try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; }
     catch { return fb; }
@@ -36,6 +49,31 @@ const db = {
     try { localStorage.setItem(k, JSON.stringify(v)); return true; }
     catch { return false; }
   },
+};
+
+// Save ALL data to Vercel KV (debounced — fires 2s after last change)
+let _syncTimer = null;
+const scheduleKVSync = (allData) => {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid: getUID(), data: allData }),
+      });
+    } catch {}
+  }, 2000);
+};
+
+// Load data from KV on startup
+const loadFromKV = async (uid) => {
+  try {
+    const res = await fetch(`/api/data?uid=${uid || getUID()}`);
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d;
+  } catch { return null; }
 };
 
 // Export all app data as JSON file
@@ -1951,6 +1989,8 @@ function Settings({ profile, setProfile, goals, setGoals }) {
   const [p, setP] = useState({...profile});
   const [g, setG] = useState({...goals});
   const [saved, setSaved] = useState(false);
+  const [syncCode, setSyncCode] = useState("");
+  const [syncMsg,  setSyncMsg]  = useState("");
 
   const autoCalc = () => {
     const tdee    = calcTDEE(p);
@@ -2070,6 +2110,35 @@ function Settings({ profile, setProfile, goals, setGoals }) {
         </div>
       </Card>
 
+      {/* Sync ID card */}
+      <Card>
+        <SL>🔄 סינכרון בין מכשירים</SL>
+        <div style={{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.7}}>
+          כדי לסנכרן לאייפון — העתק את קוד הסינכרון והכנס אותו באייפון תחת "הגדרות → טען קוד".
+        </div>
+        <div style={{background:"#0D1117",borderRadius:8,padding:"10px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:12,color:"#4ADE80",fontFamily:"monospace",wordBreak:"break-all"}}>{getUID().slice(0,8)}...{getUID().slice(-4)}</span>
+          <Btn v="green" onClick={()=>{navigator.clipboard?.writeText(getUID());setSyncMsg("✓ הועתק!");setTimeout(()=>setSyncMsg(""),2000);}} style={{fontSize:11,padding:"4px 10px"}}>העתק</Btn>
+        </div>
+        <div style={{fontSize:12,color:"#94A3B8",marginBottom:6}}>טען קוד ממכשיר אחר:</div>
+        <div style={{display:"flex",gap:8}}>
+          <TI value={syncCode} onChange={e=>setSyncCode(e.target.value)} placeholder="הדבק קוד סינכרון כאן..." style={{flex:1,fontSize:13}}/>
+          <Btn v="blue" onClick={async()=>{
+            if(!syncCode.trim()){return;}
+            setSyncMsg("⏳ טוען...");
+            const d = await loadFromKV(syncCode.trim());
+            if(d){
+              localStorage.setItem('nutri_uid', syncCode.trim());
+              window.location.reload();
+            } else {
+              setSyncMsg("לא נמצאו נתונים לקוד זה");
+              setTimeout(()=>setSyncMsg(""),3000);
+            }
+          }} style={{fontSize:12,padding:"9px 12px"}}>טען</Btn>
+        </div>
+        {syncMsg && <div style={{fontSize:12,color:"#4ADE80",marginTop:8}}>{syncMsg}</div>}
+      </Card>
+
       <Btn onClick={saveAll} style={{width:"100%",padding:"12px"}}>
         {saved ? "✓ נשמר בהצלחה!" : "שמור הגדרות"}
       </Btn>
@@ -2130,14 +2199,21 @@ export default function App() {
         db.get("nt_myFoods",   []),
       ]);
       setProfile(p); setGoals(g); setFoodLog(f); setWeightLog(w);
-      setWaterLog(wt); setFitnessLog(ft); setStepsLog(sl); setTemplates(tmpl); setShortGoals(sg); setMyFoods(mf);
-      // Show how much data was loaded (confirms storage is working)
-      const foodDays  = Object.keys(f).length;
-      const weightPts = w.length;
-      if (foodDays > 0 || weightPts > 0) {
-        setSaveStatus("saved"); // reuse indicator
-        setTimeout(()=>setSaveStatus(""), 3000);
-      }
+      // Try KV first — has the synced cross-device data
+      const kv = await loadFromKV();
+      const src = kv || {};
+      setProfile(  src.profile    || p);
+      setGoals(    src.goals      || g);
+      setFoodLog(  src.foodLog    || f);
+      setWeightLog(src.weightLog  || w);
+      setWaterLog( src.waterLog   || wt);
+      setFitnessLog(src.fitnessLog|| ft);
+      setStepsLog( src.stepsLog   || sl);
+      setTemplates(src.templates  || tmpl);
+      setShortGoals(src.shortGoals|| sg);
+      setMyFoods(  src.myFoods    || mf);
+      setSaveStatus(kv ? "saved" : (Object.keys(f).length>0 ? "saved" : ""));
+      setTimeout(()=>setSaveStatus(""), 3000);
       setReady(true);
     })();
   },[]);
@@ -2149,6 +2225,15 @@ export default function App() {
       <div style={{fontSize:12,color:"#374151"}}>טוען נתונים שמורים</div>
     </div>
   );
+
+  // Sync all state to KV whenever anything changes
+  const allState = { profile, goals, foodLog, weightLog, waterLog, fitnessLog, stepsLog, templates, myFoods, shortGoals };
+  useEffect(() => {
+    if (!ready) return;
+    scheduleKVSync(allState);
+    // Also save each key to localStorage for fast local access
+    Object.entries(allState).forEach(([k, v]) => db.set('nt_'+k, v));
+  }, [profile, goals, foodLog, weightLog, waterLog, fitnessLog, stepsLog, templates, myFoods, shortGoals]);
 
   const TABS = [
     {id:"dashboard", icon:"🏠", label:"בית"},
