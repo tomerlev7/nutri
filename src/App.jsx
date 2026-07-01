@@ -66,13 +66,16 @@ const scheduleKVSync = (allData) => {
   }, 2000);
 };
 
-// Load data from KV on startup
+// Load data from KV on startup — with 4s timeout so app never hangs
 const loadFromKV = async (uid) => {
   try {
-    const res = await fetch(`/api/data?uid=${uid || getUID()}`);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`/api/data?uid=${encodeURIComponent(uid || getUID())}`,
+      { signal: controller.signal });
+    clearTimeout(t);
     if (!res.ok) return null;
-    const d = await res.json();
-    return d;
+    return await res.json();
   } catch { return null; }
 };
 
