@@ -1989,8 +1989,6 @@ function Settings({ profile, setProfile, goals, setGoals }) {
   const [p, setP] = useState({...profile});
   const [g, setG] = useState({...goals});
   const [saved, setSaved] = useState(false);
-  const [syncCode, setSyncCode] = useState("");
-  const [syncMsg,  setSyncMsg]  = useState("");
 
   const autoCalc = () => {
     const tdee    = calcTDEE(p);
@@ -2110,33 +2108,41 @@ function Settings({ profile, setProfile, goals, setGoals }) {
         </div>
       </Card>
 
-      {/* Sync ID card */}
+      {/* Sync card - no extra state needed */}
       <Card>
         <SL>🔄 סינכרון בין מכשירים</SL>
         <div style={{fontSize:12,color:"#64748B",marginBottom:10,lineHeight:1.7}}>
-          כדי לסנכרן לאייפון — העתק את קוד הסינכרון והכנס אותו באייפון תחת "הגדרות → טען קוד".
+          כדי לסנכרן לאייפון — לחץ "הצג קוד", העתק אותו, והכנס אותו באייפון.
         </div>
-        <div style={{background:"#0D1117",borderRadius:8,padding:"10px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:12,color:"#4ADE80",fontFamily:"monospace",wordBreak:"break-all"}}>{typeof window!=='undefined' ? (localStorage.getItem('nutri_uid')||'').slice(0,8)+'...'+(localStorage.getItem('nutri_uid')||'').slice(-4) : ''}</span>
-          <Btn v="green" onClick={()=>{const uid=localStorage.getItem('nutri_uid')||'';navigator.clipboard?.writeText(uid);setSyncMsg("✓ הועתק!");setTimeout(()=>setSyncMsg(""),2000);}} style={{fontSize:11,padding:"4px 10px"}}>העתק</Btn>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <Btn v="green" onClick={()=>{
+            const uid = getUID();
+            const el = document.getElementById('nutri-sync-uid');
+            if (el) el.value = uid;
+            navigator.clipboard?.writeText(uid);
+            const msg = document.getElementById('nutri-sync-msg');
+            if (msg) { msg.textContent = '✓ הועתק!'; setTimeout(()=>{ if(msg) msg.textContent=''; },2000); }
+          }} style={{fontSize:12}}>הצג קוד ✓ העתק</Btn>
+          <span id="nutri-sync-msg" style={{fontSize:12,color:"#4ADE80",alignSelf:"center"}}></span>
         </div>
+        <input id="nutri-sync-uid" readOnly
+          style={{background:"#0D1117",border:"1px solid #2A2E42",borderRadius:9,padding:"8px 12px",color:"#4ADE80",fontSize:11,width:"100%",fontFamily:"monospace",boxSizing:"border-box",marginBottom:10}}
+          placeholder="לחץ 'הצג קוד' למעלה..." onClick={e=>e.target.select()}/>
         <div style={{fontSize:12,color:"#94A3B8",marginBottom:6}}>טען קוד ממכשיר אחר:</div>
         <div style={{display:"flex",gap:8}}>
-          <TI value={syncCode} onChange={e=>setSyncCode(e.target.value)} placeholder="הדבק קוד סינכרון כאן..." style={{flex:1,fontSize:13}}/>
+          <input id="nutri-load-code" type="text" placeholder="הדבק קוד סינכרון..."
+            style={{flex:1,background:"#0D1117",border:"1px solid #2A2E42",borderRadius:9,padding:"9px 12px",color:"#E2E8F0",fontSize:13,fontFamily:"inherit",direction:"rtl",outline:"none"}}/>
           <Btn v="blue" onClick={async()=>{
-            if(!syncCode.trim()){return;}
-            setSyncMsg("⏳ טוען...");
-            const d = await loadFromKV(syncCode.trim());
-            if(d){
-              localStorage.setItem('nutri_uid', syncCode.trim());
-              window.location.reload();
-            } else {
-              setSyncMsg("לא נמצאו נתונים לקוד זה");
-              setTimeout(()=>setSyncMsg(""),3000);
-            }
+            const inp = document.getElementById('nutri-load-code');
+            const code = inp?.value?.trim();
+            if (!code) return;
+            inp.disabled = true;
+            const d = await loadFromKV(code);
+            inp.disabled = false;
+            if (d) { localStorage.setItem('nutri_uid', code); alert('✅ נמצא! מרענן...'); window.location.reload(); }
+            else alert('לא נמצאו נתונים לקוד זה');
           }} style={{fontSize:12,padding:"9px 12px"}}>טען</Btn>
         </div>
-        {syncMsg && <div style={{fontSize:12,color:"#4ADE80",marginTop:8}}>{syncMsg}</div>}
       </Card>
 
       <Btn onClick={saveAll} style={{width:"100%",padding:"12px"}}>
@@ -2169,17 +2175,7 @@ export default function App() {
   const [shortGoals, setShortGoals] = useState([]);
   const [myFoods,    setMyFoods]    = useState([]);
   const [ready,      setReady]      = useState(false);
-  const [saveStatus, setSaveStatus] = useState(""); // "" | "saving" | "saved" | "error"
-  const importRef = useRef(null);
-
-  // Wrap db.set with visible feedback
-  const save = async (key, value, setter) => {
-    setSaveStatus("saving");
-    if (setter) setter(value);
-    const ok = await db.set(key, value);
-    setSaveStatus(ok ? "saved" : "error");
-    setTimeout(()=>setSaveStatus(""), 2000);
-  };
+  // sync handled via db.set automatically
 
   useEffect(()=>{
     const link = document.createElement("link");
@@ -2226,14 +2222,7 @@ export default function App() {
     </div>
   );
 
-  // Sync to KV whenever any data changes
-  useEffect(() => {
-    if (!ready) return;
-    const data = { profile, goals, foodLog, weightLog, waterLog,
-      fitnessLog, stepsLog, templates, myFoods, shortGoals };
-    scheduleKVSync(data);
-  }, [ready, profile, goals, foodLog, weightLog, waterLog,
-      fitnessLog, stepsLog, templates, myFoods, shortGoals]);
+
 
   const TABS = [
     {id:"dashboard", icon:"🏠", label:"בית"},
@@ -2254,9 +2243,7 @@ export default function App() {
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ width:30, height:30, borderRadius:"50%", background:"linear-gradient(135deg,#4ADE80,#818CF8)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>🌿</div>
               <span style={{ fontSize:19, fontWeight:800, letterSpacing:"-0.5px" }}>נוטרי</span>
-              {saveStatus==="saving" && <span style={{fontSize:10,color:"#F59E0B"}}>שומר...</span>}
-              {saveStatus==="saved"  && <span style={{fontSize:10,color:"#4ADE80"}}>✓ נשמר</span>}
-              {saveStatus==="error"  && <span style={{fontSize:10,color:"#F87171"}}>⚠ שגיאת שמירה</span>}
+
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               {/* Hidden file input for import */}
@@ -2285,7 +2272,7 @@ export default function App() {
                   };
                   reader.readAsText(file);
                 }}/>
-              <button onClick={()=>importRef.current?.click()}
+              <button onClick={()=>document.getElementById('nutri-import-input')?.click()}
                 style={{background:"rgba(96,165,250,0.1)",border:"1px solid rgba(96,165,250,0.25)",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#60A5FA",fontFamily:"inherit"}}>
                 📂
               </button>
