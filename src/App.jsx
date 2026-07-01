@@ -2117,8 +2117,8 @@ function Settings({ profile, setProfile, goals, setGoals }) {
           כדי לסנכרן לאייפון — העתק את קוד הסינכרון והכנס אותו באייפון תחת "הגדרות → טען קוד".
         </div>
         <div style={{background:"#0D1117",borderRadius:8,padding:"10px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:12,color:"#4ADE80",fontFamily:"monospace",wordBreak:"break-all"}}>{getUID().slice(0,8)}...{getUID().slice(-4)}</span>
-          <Btn v="green" onClick={()=>{navigator.clipboard?.writeText(getUID());setSyncMsg("✓ הועתק!");setTimeout(()=>setSyncMsg(""),2000);}} style={{fontSize:11,padding:"4px 10px"}}>העתק</Btn>
+          <span style={{fontSize:12,color:"#4ADE80",fontFamily:"monospace",wordBreak:"break-all"}}>{typeof window!=='undefined' ? (localStorage.getItem('nutri_uid')||'').slice(0,8)+'...'+(localStorage.getItem('nutri_uid')||'').slice(-4) : ''}</span>
+          <Btn v="green" onClick={()=>{const uid=localStorage.getItem('nutri_uid')||'';navigator.clipboard?.writeText(uid);setSyncMsg("✓ הועתק!");setTimeout(()=>setSyncMsg(""),2000);}} style={{fontSize:11,padding:"4px 10px"}}>העתק</Btn>
         </div>
         <div style={{fontSize:12,color:"#94A3B8",marginBottom:6}}>טען קוד ממכשיר אחר:</div>
         <div style={{display:"flex",gap:8}}>
@@ -2226,14 +2226,14 @@ export default function App() {
     </div>
   );
 
-  // Sync all state to KV whenever anything changes
-  const allState = { profile, goals, foodLog, weightLog, waterLog, fitnessLog, stepsLog, templates, myFoods, shortGoals };
+  // Sync to KV whenever any data changes
   useEffect(() => {
     if (!ready) return;
-    scheduleKVSync(allState);
-    // Also save each key to localStorage for fast local access
-    Object.entries(allState).forEach(([k, v]) => db.set('nt_'+k, v));
-  }, [profile, goals, foodLog, weightLog, waterLog, fitnessLog, stepsLog, templates, myFoods, shortGoals]);
+    const data = { profile, goals, foodLog, weightLog, waterLog,
+      fitnessLog, stepsLog, templates, myFoods, shortGoals };
+    scheduleKVSync(data);
+  }, [ready, profile, goals, foodLog, weightLog, waterLog,
+      fitnessLog, stepsLog, templates, myFoods, shortGoals]);
 
   const TABS = [
     {id:"dashboard", icon:"🏠", label:"בית"},
