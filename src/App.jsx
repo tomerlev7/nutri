@@ -27,7 +27,7 @@ const WORKOUT_TYPES = {
 const SWIM_STYLES = ["חופשי","חזה","גב","פרפר","מעורב"];
 
 // ══ Storage ════════════════════════════════════════════════════════════
-// ── Sync ID (only thing stored locally — everything else goes to KV) ──
+// ── User ID for cross-device sync ──
 const getUID = () => {
   let uid = localStorage.getItem('nutri_uid');
   if (!uid) {
@@ -39,34 +39,43 @@ const getUID = () => {
   return uid;
 };
 
-const db = {
-  // localStorage for instant local access
-  get: async (k, fb) => {
-    try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; }
-    catch { return fb; }
-  },
-  set: async (k, v) => {
-    try { localStorage.setItem(k, JSON.stringify(v)); return true; }
-    catch { return false; }
-  },
-};
-
-// Save ALL data to Vercel KV (debounced — fires 2s after last change)
+// ── Auto-sync: reads ALL data from localStorage → saves to Supabase ──
 let _syncTimer = null;
-const scheduleKVSync = (allData) => {
+const _triggerSync = () => {
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(async () => {
+    const keys = ['profile','goals','foodLog','weightLog','waterLog',
+                  'fitnessLog','stepsLog','templates','myFoods','shortGoals'];
+    const data = {};
+    keys.forEach(k => {
+      try { const v = localStorage.getItem('nt_'+k); if (v) data[k] = JSON.parse(v); } catch {}
+    });
     try {
       await fetch('/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uid: getUID(), data: allData }),
+        body: JSON.stringify({ uid: getUID(), data }),
       });
     } catch {}
   }, 2000);
 };
 
-// Load data from KV on startup — with 4s timeout so app never hangs
+const db = {
+  get: async (k, fb) => {
+    try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; }
+    catch { return fb; }
+  },
+  // Every save → localStorage immediately + Supabase sync after 2s
+  set: async (k, v) => {
+    try {
+      localStorage.setItem(k, JSON.stringify(v));
+      _triggerSync(); // ← THIS is what was missing
+      return true;
+    } catch { return false; }
+  },
+};
+
+// Load data from Supabase on startup — with 4s timeout
 const loadFromKV = async (uid) => {
   try {
     const controller = new AbortController();
