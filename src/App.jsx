@@ -2294,7 +2294,7 @@ export default function App() {
                 try{
                   const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:getUID(),data})});
                   const j=await r.json();
-                  if(btn){btn.textContent=j.ok?'✅ נשמר':'❌ שגיאה';setTimeout(()=>{if(btn){btn.textContent='☁️ שמור';btn.disabled=false;}},2000);}
+                  if(btn){btn.textContent=j.ok?'✅ נשמר':'❌ '+(j.detail||j.error||j.status||'שגיאה');setTimeout(()=>{if(btn){btn.textContent='☁️ שמור';btn.disabled=false;}},4000);}
                 }catch(e){
                   if(btn){btn.textContent='❌ '+e.message.slice(0,15);setTimeout(()=>{if(btn){btn.textContent='☁️ שמור';btn.disabled=false;}},3000);}
                 }

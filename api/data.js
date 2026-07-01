@@ -1,5 +1,4 @@
-// api/data.js — Supabase sync endpoint
-export default async function handler(req, res) {
+﻿export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -7,9 +6,8 @@ export default async function handler(req, res) {
 
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_KEY = process.env.SUPABASE_KEY;
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    return res.status(500).json({ error: 'Supabase not configured' });
-  }
+  if (!SUPABASE_URL || !SUPABASE_KEY)
+    return res.status(500).json({ error: 'Supabase env vars missing' });
 
   const headers = {
     'Content-Type': 'application/json',
@@ -18,7 +16,7 @@ export default async function handler(req, res) {
   };
 
   const uid = req.method === 'GET' ? req.query.uid : req.body?.uid;
-  if (!uid || uid.length < 6) return res.status(400).json({ error: 'invalid uid' });
+  if (!uid) return res.status(400).json({ error: 'uid required' });
 
   try {
     if (req.method === 'GET') {
@@ -26,24 +24,27 @@ export default async function handler(req, res) {
         `${SUPABASE_URL}/rest/v1/nutri_data?uid=eq.${encodeURIComponent(uid)}&select=data`,
         { headers }
       );
-      const rows = await r.json();
+      const text = await r.text();
+      if (!r.ok) return res.status(200).json(null);
+      const rows = JSON.parse(text);
       return res.status(200).json(rows?.[0]?.data || null);
     }
 
     if (req.method === 'POST') {
       const { data } = req.body;
       if (!data) return res.status(400).json({ error: 'no data' });
-      // Upsert
       const r = await fetch(`${SUPABASE_URL}/rest/v1/nutri_data`, {
         method: 'POST',
         headers: { ...headers, 'Prefer': 'resolution=merge-duplicates' },
         body: JSON.stringify({ uid, data, updated_at: new Date().toISOString() }),
       });
-      return res.status(r.ok ? 200 : 500).json({ ok: r.ok });
+      const text = await r.text();
+      if (!r.ok) return res.status(200).json({ ok: false, status: r.status, detail: text.slice(0, 200) });
+      return res.status(200).json({ ok: true });
     }
 
     res.status(405).end();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(200).json({ ok: false, error: err.message });
   }
 }
