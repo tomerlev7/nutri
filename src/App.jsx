@@ -2248,7 +2248,7 @@ export default function App() {
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               {/* Hidden file input for import */}
-              <input ref={importRef} type="file" accept=".json" style={{display:"none"}}
+              <input type="file" accept=".json" style={{display:"none"}}
                 onChange={e=>{
                   const file = e.target.files?.[0]; if(!file) return;
                   const reader = new FileReader();
