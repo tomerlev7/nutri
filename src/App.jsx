@@ -2285,9 +2285,26 @@ export default function App() {
                 style={{background:"rgba(96,165,250,0.1)",border:"1px solid rgba(96,165,250,0.25)",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#60A5FA",fontFamily:"inherit"}}>
                 📂
               </button>
-              <button onClick={()=>exportAllData(profile,goals,foodLog,weightLog,waterLog,fitnessLog,stepsLog,templates,myFoods,shortGoals)}
+              <button onClick={async()=>{
+                const keys=['profile','goals','foodLog','weightLog','waterLog','fitnessLog','stepsLog','templates','myFoods','shortGoals'];
+                const data={};
+                keys.forEach(k=>{try{const v=localStorage.getItem('nt_'+k);if(v)data[k]=JSON.parse(v);}catch{}});
+                const btn=document.getElementById('nutri-sync-btn');
+                if(btn){btn.textContent='⏳';btn.disabled=true;}
+                try{
+                  const r=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:getUID(),data})});
+                  const j=await r.json();
+                  if(btn){btn.textContent=j.ok?'✅ נשמר':'❌ שגיאה';setTimeout(()=>{if(btn){btn.textContent='☁️ שמור';btn.disabled=false;}},2000);}
+                }catch(e){
+                  if(btn){btn.textContent='❌ '+e.message.slice(0,15);setTimeout(()=>{if(btn){btn.textContent='☁️ שמור';btn.disabled=false;}},3000);}
+                }
+              }} id="nutri-sync-btn"
                 style={{background:"rgba(74,222,128,0.1)",border:"1px solid rgba(74,222,128,0.25)",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#4ADE80",fontFamily:"inherit"}}>
-                💾 גיבוי
+                ☁️ שמור
+              </button>
+              <button onClick={()=>exportAllData(profile,goals,foodLog,weightLog,waterLog,fitnessLog,stepsLog,templates,myFoods,shortGoals)}
+                style={{background:"rgba(96,165,250,0.1)",border:"1px solid rgba(96,165,250,0.25)",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#60A5FA",fontFamily:"inherit"}}>
+                💾
               </button>
             </div>
           </div>
