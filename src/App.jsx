@@ -1965,7 +1965,7 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog, fitnessLog, s
       goals, goalWeight:profile.goalWeight,
       todayTotals:sumFood(tod),
       todayFoods:tod.map(f=>({name:f.name,cal:f.calories,pro:f.protein||0,amount:f.amount||""})),
-      last7days:Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); const k=dateStr(d); return {date:k,total:sumFood(foodLog[k]||[])}; }).reverse(),
+      last7days:Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); const k=dateStr(d); const fs=foodLog[k]||[]; return {date:k,foods:fs.map(f=>f.name+' ('+Math.round(f.calories)+'קל׳)'),total:sumFood(fs)}; }).reverse(),
       recentWeights:weightLog.slice(-14),
       weekWorkouts:(()=>{const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return dateStr(d); }); return last7.flatMap(k=>(fitnessLog||{})[k]||[]).map(w=>({date:w.date,type:w.type,dur:w.duration,cal:w.calories}));})(),
       todaySteps:(stepsLog||{})[TODAY()]||0,
