@@ -278,6 +278,10 @@ ${workout.exercises?.length?"תרגילים: "+workout.exercises.map(e=>e.name).
 };
 
 const chatCoach = async (messages, ctx) => {
+  const wf = (ctx.weekWorkouts||[]).map(w=>w.type+' '+w.dur+'דקות '+w.cal+'קל').join(', ')||'לא תועדו';
+  const tf = (ctx.todayFoods||[]).map(f=>f.name+(f.amount?' ('+f.amount+')':'')+': '+f.cal+'קל ח:'+f.pro+'g').join(' | ')||'טרם הוזנו';
+  const w14 = (ctx.recentWeights||[]).slice(-5).map(w=>w.date.slice(5)+': '+w.weight+'kg').join(', ')||'לא תועד';
+  const d7 = (ctx.last7days||[]).map(d=>d.date+': '+Math.round(d.total?.calories||0)+'קל ח:'+Math.round(d.total?.protein||0)+'g | '+(d.foods||[]).length+' ארוחות').join('\n');
   const sys = `אתה נוטרי — תזונאי קליני ומאמן כושר אישי של ${ctx.name||"המשתמש"}.
 
 אישיות: שילוב של תזונאי מקצועי, מאמן שמכיר אותך לעומק, וחבר שדוחף בעדינות. חם אבל ישיר. לא גנרי לעולם.
@@ -285,32 +289,30 @@ const chatCoach = async (messages, ctx) => {
 כללי תגובה מחייבים:
 1. תמיד התחל ממה שבולט בנתונים — מספר ספציפי, דפוס, חריגה. לא פתיחה גנרית.
 2. תמיד כלול מספרים קונקרטיים: "חסרים לך 43g חלבון" ולא "לא אכלת מספיק חלבון"
-3. אם יש דפוס בנתונים — ציין אותו בפירוש: "שמתי לב ש..."
+3. אם יש דפוס בנתונים — ציין אותו: "שמתי לב ש..."
 4. סיים תמיד עם שאלה אחת ממוקדת או המלצת פעולה אחת ברורה
-5. כשמישהו שואל שאלה כללית — ענה עם הנתונים הספציפיים שלו, לא תשובה כללית
+5. ענה תמיד עם הנתונים הספציפיים שלו, לא תשובות כלליות
 
 נתונים של ${ctx.name}:
-גובה: ${ctx.height}cm | משקל: ${ctx.weight}kg | גיל: ${ctx.age} | BMI: ${ctx.bmi} | TDEE: ${ctx.tdee}קל'
-יעד משקל: ${ctx.goalWeight}kg | יעדים: ${ctx.goals?.calories}קל' | חלבון:${ctx.goals?.protein}g | פחמ':${ctx.goals?.carbs}g | שומן:${ctx.goals?.fat}g
+גובה: ${ctx.height}cm | משקל: ${ctx.weight}kg | גיל: ${ctx.age} | BMI: ${ctx.bmi} | TDEE: ${ctx.tdee}קל
+יעד משקל: ${ctx.goalWeight}kg | יעדים: ${ctx.goals?.calories}קל | חלבון:${ctx.goals?.protein}g | פחמימות:${ctx.goals?.carbs}g | שומן:${ctx.goals?.fat}g
 
 היום:
-- נאכל: ${ctx.todayTotals?.calories||0}קל' | חלבון:${ctx.todayTotals?.protein||0}g | פחמ':${ctx.todayTotals?.carbs||0}g | שומן:${ctx.todayTotals?.fat||0}g
-- נותר: ${(ctx.goals?.calories||0)-(ctx.todayTotals?.calories||0)}קל' | חלבון:${(ctx.goals?.protein||0)-(ctx.todayTotals?.protein||0)}g
-- ארוחות: ${(ctx.todayFoods||[]).map(f=>f.name+(f.amount?' ('+f.amount+')':'')+': '+f.cal+"קל' ח:"+f.pro+'g').join(' | ')||'טרם הוזנו'}
+- נאכל: ${ctx.todayTotals?.calories||0}קל | חלבון:${ctx.todayTotals?.protein||0}g | פחמימות:${ctx.todayTotals?.carbs||0}g | שומן:${ctx.todayTotals?.fat||0}g
+- נותר: ${(ctx.goals?.calories||0)-(ctx.todayTotals?.calories||0)}קל | חלבון:${(ctx.goals?.protein||0)-(ctx.todayTotals?.protein||0)}g
+- ארוחות: ${tf}
 - צעדים: ${ctx.todaySteps||0}
 
 7 ימים אחרונים:
-${(ctx.last7days||[]).map(d=>d.date+': '+Math.round(d.total?.calories||0)+"קל' | ח:"+Math.round(d.total?.protein||0)+'g | '+(d.foods||[]).length+' ארוחות').join('
-')}
+${d7}
 
-אימונים השבוע: ${(ctx.weekWorkouts||[]).map(w=>w.type+' '+w.dur+"דק' "+w.cal+"קל'").join(', ')||'לא תועדו'}
-משקל 14 יום: ${(ctx.recentWeights||[]).slice(-5).map(w=>w.date.slice(5)+': '+w.weight+'kg').join(', ')||'לא תועד'}
+אימונים השבוע: ${wf}
+משקל 14 יום: ${w14}
 רצף: ${ctx.streak||0} ימים
 
 דבר עברית. קצר וממוקד — עד 5 משפטים אלא אם ביקשו פירוט.`;
   return callClaude(messages, sys, true, 1000);
-};
-
+}
 const weeklyFeedback = async ctx => callClaude(
   [{ role:"user", content:"תן סיכום שבועי: ממוצע קלוריות, חלבון, שינוי משקל, אימונים, מה הלך טוב ומה לשפר. בעברית, קצר וחם." }],
   `מאמן תזונה ואימונים. נתוני שבוע: ${JSON.stringify(ctx)}`,
