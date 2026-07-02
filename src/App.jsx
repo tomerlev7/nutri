@@ -1891,9 +1891,11 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog, fitnessLog, s
   const [loading, setLoading]   = useState(false);
   const endRef = useRef(null);
 
-  // Load from synced chatHistory (comes from Supabase via App)
+  // Load chat history at startup only (don't overwrite mid-conversation)
   useEffect(()=>{
-    if (chatHistory && chatHistory.length > 0) setMessages(chatHistory);
+    if (chatHistory && chatHistory.length > 0 && messages.length <= 1) {
+      setMessages(chatHistory);
+    }
   },[chatHistory]);
 
   const [logLoading, setLogLoading] = useState(false);
