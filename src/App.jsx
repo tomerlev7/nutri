@@ -45,7 +45,7 @@ const _triggerSync = () => {
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(async () => {
     const keys = ['profile','goals','foodLog','weightLog','waterLog',
-                  'fitnessLog','stepsLog','templates','myFoods','shortGoals'];
+                  'fitnessLog','stepsLog','templates','myFoods','shortGoals','chat'];
     const data = {};
     keys.forEach(k => {
       try { const v = localStorage.getItem('nt_'+k); if (v) data[k] = JSON.parse(v); } catch {}
@@ -1870,7 +1870,7 @@ function GoalsTab({ profile, goals, foodLog, weightLog, fitnessLog, shortGoals, 
 }
 
 // ══ Chat Tab ═══════════════════════════════════════════════════════════
-function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog }) {
+function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog, fitnessLog, stepsLog, myFoods, setMyFoods, chatHistory, setChatHistory }) {
   const lw  = weightLog.at(-1)?.weight ?? profile.weight;
   const tod = foodLog[TODAY()] || [];
   const initMsg = {
@@ -1891,14 +1891,17 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog }) {
   const [loading, setLoading]   = useState(false);
   const endRef = useRef(null);
 
+  // Load from synced chatHistory (comes from Supabase via App)
   useEffect(()=>{
-    db.get("nt_chat",[initMsg]).then(saved => { if(saved.length>0) setMessages(saved); });
-  },[]);
+    if (chatHistory && chatHistory.length > 0) setMessages(chatHistory);
+  },[chatHistory]);
 
   const [logLoading, setLogLoading] = useState(false);
   const [logMsg,     setLogMsg]     = useState("");
+  const [saveLoading,setSaveLoading]= useState(false);
+  const [pendingSave,setPendingSave] = useState(null); // food to save to myFoods
 
-  // Log food directly from chat input to today's food log
+  // Log food to today's diary
   const logFromChat = async () => {
     if (!input.trim() || logLoading) return;
     setLogLoading(true); setLogMsg("");
@@ -1920,21 +1923,62 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog }) {
     setTimeout(()=>setLogMsg(""), 4000);
   };
 
+  // Save food as a personal product (⭐ שלי)
+  const saveToMyFoods = async () => {
+    if (!input.trim() || saveLoading) return;
+    setSaveLoading(true); setLogMsg("");
+    try {
+      const items = await parseNaturalFood(input);
+      if (items && items.length > 0) {
+        const item = items[0];
+        setPendingSave({
+          name: item.name, per: 100, unit: "ג",
+          calories: item.calories, protein: item.protein,
+          carbs: item.carbs, fat: item.fat, fiber: item.fiber,
+        });
+      } else {
+        setLogMsg("לא זיהיתי מוצר — נסה שם מפורט יותר");
+        setTimeout(()=>setLogMsg(""), 3000);
+      }
+    } catch { setLogMsg("שגיאה — נסה שוב"); setTimeout(()=>setLogMsg(""),3000); }
+    setSaveLoading(false);
+  };
+
+  const confirmSaveMyFood = () => {
+    if (!pendingSave) return;
+    const f = {...pendingSave, id: Date.now()};
+    const upd = [...(myFoods||[]), f];
+    setMyFoods(upd); db.set("nt_myFoods", upd);
+    setLogMsg(`✅ "${f.name}" נשמר ל-⭐ המוצרים שלי`);
+    setPendingSave(null); setInput("");
+    setTimeout(()=>setLogMsg(""), 3000);
+  };
+
   const send = async () => {
     if (!input.trim()||loading) return;
     const um = {role:"user",content:input};
     const updated = [...messages, um];
     setMessages(updated); setInput(""); setLoading(true);
     const ctx = {
-      name:profile.name, weight:lw, height:profile.height, age:profile.age,
+      name:profile.name, gender:profile.gender, weight:lw, height:profile.height, age:profile.age,
       bmi:calcBMI(lw,profile.height), tdee:calcTDEE({...profile,weight:lw}),
-      goals, todayTotals:sumFood(tod), goalWeight:profile.goalWeight,
-      todayFoods:tod.slice(-6).map(f=>({name:f.name,cal:f.calories,pro:f.protein})),
+      goals, goalWeight:profile.goalWeight,
+      todayTotals:sumFood(tod),
+      todayFoods:tod.map(f=>({name:f.name,cal:f.calories,pro:f.protein||0,amount:f.amount||""})),
+      last7days:Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); const k=dateStr(d); return {date:k,total:sumFood(foodLog[k]||[])}; }).reverse(),
+      recentWeights:weightLog.slice(-14),
+      weekWorkouts:(()=>{const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return dateStr(d); }); return last7.flatMap(k=>(fitnessLog||{})[k]||[]).map(w=>({date:w.date,type:w.type,dur:w.duration,cal:w.calories}));})(),
+      todaySteps:(stepsLog||{})[TODAY()]||0,
+      todayFoods2:tod.slice(-6).map(f=>({name:f.name,cal:f.calories,pro:f.protein})),
       recentWeights:weightLog.slice(-7),
     };
     const reply = await chatCoach(updated.map(m=>({role:m.role,content:m.content})), ctx);
     const full  = [...updated, {role:"assistant",content:reply}];
-    setMessages(full); db.set("nt_chat", full.slice(-30)); setLoading(false);
+    const trimmed = full.slice(-40);
+    setMessages(trimmed);
+    db.set("nt_chat", trimmed);
+    if (setChatHistory) setChatHistory(trimmed);
+    setLoading(false);
     setTimeout(()=>endRef.current?.scrollIntoView({behavior:"smooth"}),80);
   };
 
@@ -1982,15 +2026,36 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog }) {
             {logMsg}
           </div>
         )}
+        {/* Pending save to My Foods */}
+        {pendingSave && (
+          <div style={{marginBottom:10,background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.3)",borderRadius:10,padding:"12px 14px"}}>
+            <div style={{fontSize:12,color:"#F59E0B",fontWeight:700,marginBottom:8}}>⭐ שמור כמוצר אישי?</div>
+            <div style={{fontSize:13,color:"#E2E8F0",marginBottom:6}}>{pendingSave.name}</div>
+            <div style={{fontSize:11,color:"#4B5568",marginBottom:10}}>
+              ל-{pendingSave.per}{pendingSave.unit}: {pendingSave.calories}קל׳ · ח:{pendingSave.protein}ג · פ:{pendingSave.carbs}ג · ש:{pendingSave.fat}ג
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn onClick={confirmSaveMyFood} style={{fontSize:12,padding:"6px 14px"}}>⭐ שמור</Btn>
+              <Btn v="ghost" onClick={()=>setPendingSave(null)} style={{fontSize:12,padding:"6px 12px"}}>בטל</Btn>
+            </div>
+          </div>
+        )}
         <div style={{display:"flex",gap:6}}>
           <TI value={input} onChange={e=>setInput(e.target.value)} placeholder="שאל את נוטרי, או כתוב מה אכלת..."
             onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()} style={{flex:1}}/>
-          <Btn v="green" onClick={logFromChat} disabled={logLoading} style={{fontSize:12,padding:"9px 10px",whiteSpace:"nowrap"}}>
+          <Btn v="amber" onClick={saveToMyFoods} disabled={saveLoading}
+            style={{fontSize:12,padding:"9px 10px",whiteSpace:"nowrap"}} title="שמור כמוצר שלי">
+            {saveLoading?"⏳":"⭐"}
+          </Btn>
+          <Btn v="green" onClick={logFromChat} disabled={logLoading}
+            style={{fontSize:12,padding:"9px 10px",whiteSpace:"nowrap"}} title="הוסף לאוכל היום">
             {logLoading?"⏳":"🍽️"}
           </Btn>
           <Btn onClick={send} disabled={loading}>שלח ↵</Btn>
         </div>
-        <div style={{fontSize:10,color:"#374151",marginTop:4}}>🍽️ = רשום ישירות לאוכל · Enter = שאל את נוטרי</div>
+        <div style={{fontSize:10,color:"#374151",marginTop:4}}>
+          ⭐ = שמור כמוצר שלי · 🍽️ = רשום לאוכל היום · Enter = שאל את נוטרי
+        </div>
       </div>
     </div>
   );
@@ -2186,6 +2251,7 @@ export default function App() {
   const [templates,  setTemplates]  = useState([]);
   const [shortGoals, setShortGoals] = useState([]);
   const [myFoods,    setMyFoods]    = useState([]);
+  const [chatHistory,setChatHistory] = useState([]);
   const [ready,      setReady]      = useState(false);
   // sync handled via db.set automatically
 
@@ -2194,7 +2260,7 @@ export default function App() {
     link.href = "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&display=swap";
     link.rel = "stylesheet"; document.head.appendChild(link);
     (async()=>{
-      const [p,g,f,w,wt,ft,sl,tmpl,sg,mf] = await Promise.all([
+      const [p,g,f,w,wt,ft,sl,tmpl,sg,mf,ch] = await Promise.all([
         db.get("nt_profile",   DEFAULTS.profile),
         db.get("nt_goals",     DEFAULTS.goals),
         db.get("nt_foodLog",   {}),
@@ -2205,6 +2271,7 @@ export default function App() {
         db.get("nt_templates", []),
         db.get("nt_shortGoals",[]),
         db.get("nt_myFoods",   []),
+        db.get("nt_chat",      []),
       ]);
       setProfile(p); setGoals(g); setFoodLog(f); setWeightLog(w);
       // Try KV first — has the synced cross-device data
@@ -2220,6 +2287,7 @@ export default function App() {
       setTemplates(src.templates  || tmpl);
       setShortGoals(src.shortGoals|| sg);
       setMyFoods(  src.myFoods    || mf);
+      if ((src.chat || ch).length > 0) setChatHistory(src.chat || ch);
       setReady(true);
     })();
   },[]);
@@ -2334,7 +2402,7 @@ export default function App() {
         {tab==="fitness"   && <FitnessLog fitnessLog={fitnessLog} setFitnessLog={setFitnessLog} weightLog={weightLog} profile={profile} stepsLog={stepsLog} setStepsLog={setStepsLog}/>}
         {tab==="weight"    && <WeightTab profile={profile} setProfile={setProfile} weightLog={weightLog} setWeightLog={setWeightLog}/>}
         {tab==="goals"     && <GoalsTab   profile={profile} goals={goals} foodLog={foodLog} weightLog={weightLog} fitnessLog={fitnessLog} shortGoals={shortGoals} setShortGoals={setShortGoals}/>}
-        {tab==="chat"      && <ChatTab   profile={profile} goals={goals} foodLog={foodLog} setFoodLog={setFoodLog} weightLog={weightLog}/>}
+        {tab==="chat"      && <ChatTab   profile={profile} goals={goals} foodLog={foodLog} setFoodLog={setFoodLog} weightLog={weightLog} fitnessLog={fitnessLog} stepsLog={stepsLog} myFoods={myFoods} setMyFoods={setMyFoods} chatHistory={chatHistory} setChatHistory={setChatHistory}/>}
         {tab==="settings"  && <Settings  profile={profile} setProfile={setProfile} goals={goals} setGoals={setGoals}/>}
       </div>
     </div>
