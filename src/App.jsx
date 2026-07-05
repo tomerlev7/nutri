@@ -2376,6 +2376,17 @@ export default function App() {
       // Try KV first — has the synced cross-device data
       const kv = await loadFromKV();
       const src = kv || {};
+      // CRITICAL: update localStorage with Supabase data
+      // so auto-sync doesn't overwrite Supabase with stale local data
+      if (kv) {
+        const kvKeys = ['profile','goals','foodLog','weightLog','waterLog',
+                        'fitnessLog','stepsLog','templates','myFoods','shortGoals','chat'];
+        kvKeys.forEach(k => {
+          if (src[k] !== undefined) {
+            try { localStorage.setItem('nt_'+k, JSON.stringify(src[k])); } catch {}
+          }
+        });
+      }
       setProfile(  src.profile    || p);
       setGoals(    src.goals      || g);
       setFoodLog(  src.foodLog    || f);
