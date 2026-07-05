@@ -26,6 +26,26 @@ const WORKOUT_TYPES = {
 };
 const SWIM_STYLES = ["חופשי","חזה","גב","פרפר","מעורב"];
 
+const EXERCISES = {
+  "חזה": ["Bench Press","Chest Press","Incline Press","Push-up","Dumbbell Flyes","Cable Flyes","Pec Deck"],
+  "גב":  ["Deadlift","Pull-up","Lat Pulldown","Seated Row","Bent-over Row","T-Bar Row","Face Pull"],
+  "כתפיים": ["Overhead Press","Lateral Raise","Front Raise","Arnold Press","Rear Delt Fly","Shrugs"],
+  "ידיים": ["Bicep Curl","Hammer Curl","Preacher Curl","Tricep Extension","Skull Crusher","Dips","Close-grip Press"],
+  "רגליים": ["Squat","Hack Squat","Leg Press","Lunges","Leg Extension","Leg Curl","Calf Raise","Romanian Deadlift"],
+  "ליבה":  ["Plank","Crunches","Russian Twist","Leg Raise","Cable Crunch","Ab Rollout"],
+};
+const ALL_EXERCISES = Object.values(EXERCISES).flat();
+
+// Estimate strength calories from sets/reps/weight (no duration needed)
+// ~0.1 kcal per kg lifted per rep + 30% overhead for rest/warmup
+const strengthCalories = (exercises) => {
+  const lifted = exercises.reduce((s,ex)=>{
+    const w=parseFloat(ex.weight)||0, sets=parseInt(ex.sets)||0, reps=parseInt(ex.reps)||0;
+    return s + w*sets*reps*0.1;
+  }, 0);
+  return Math.round(lifted * 1.3) || 0;
+};
+
 // ══ Storage ════════════════════════════════════════════════════════════
 // ── User ID for cross-device sync ──
 const getUID = () => {
@@ -162,11 +182,12 @@ const stepsPerKmInclined = (heightCm, inclinePct, override=null) => {
 const dayWorkoutCal = (fitnessLog, date) =>
   (fitnessLog[date]||[]).reduce((s,w) => s+(w.calories||0), 0);
 
-// Effective daily goals: base goals + workout calories earned today
-// Uses eat-back approach: TDEE is sedentary baseline, workout earns extra budget
+// Fixed daily target: calories goal stays constant regardless of workouts.
+// Workouts DEEPEN the deficit — they don't earn extra food.
+// This is better for consistent weight loss of 0.75kg/week.
 const effectiveGoals = (goals, fitnessLog, date) => {
-  const bonus = dayWorkoutCal(fitnessLog, date);
-  return { ...goals, calories: goals.calories + bonus, _workoutBonus: bonus };
+  const burned = dayWorkoutCal(fitnessLog, date);
+  return { ...goals, _workoutBurned: burned, _workoutBonus: 0 };
 };
 
 // ══ Claude API helpers ═════════════════════════════════════════════════
@@ -646,10 +667,10 @@ function Dashboard({ profile, goals, foodLog, weightLog, waterLog, fitnessLog, s
 
       {/* Arc + rings — uses effective goal (TDEE + workout bonus) */}
       <Card>
-        {workoutBonus > 0 && (
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,background:"rgba(248,113,113,0.08)",borderRadius:9,padding:"7px 12px"}}>
-            <span style={{fontSize:12,color:"#94A3B8"}}>🔥 שרפת היום: <strong style={{color:"#F87171"}}>{workoutBonus} קל׳</strong></span>
-            <span style={{fontSize:12,color:"#4ADE80",fontWeight:700}}>יעד מעודכן: {eGoals.calories} קל׳</span>
+        {eGoals._workoutBurned > 0 && (
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,background:"rgba(74,222,128,0.06)",borderRadius:9,padding:"7px 12px"}}>
+            <span style={{fontSize:12,color:"#94A3B8"}}>🔥 נשרף באימון: <strong style={{color:"#F87171"}}>{eGoals._workoutBurned} קל׳</strong></span>
+            <span style={{fontSize:12,color:"#4ADE80",fontWeight:700}}>גירעון כולל: {Math.round((eGoals.calories - tot.calories) + eGoals._workoutBurned)} קל׳</span>
           </div>
         )}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-around", flexWrap:"wrap", gap:14 }}>
@@ -671,13 +692,14 @@ function Dashboard({ profile, goals, foodLog, weightLog, waterLog, fitnessLog, s
           <PBar label="פחמימות" v={tot.carbs}    max={eGoals.carbs}    color="#F59E0B" unit="ג׳"/>
           <PBar label="שומן"    v={tot.fat}      max={eGoals.fat}      color="#F87171" unit="ג׳"/>
         </div>
-        {/* Net calories row */}
+        {/* Net balance row */}
         <div style={{marginTop:12,background:"#0D1117",borderRadius:8,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-          <span style={{fontSize:12,color:"#4B5568"}}>מאזן נטו היום</span>
-          <div style={{display:"flex",gap:16,fontSize:13}}>
+          <span style={{fontSize:12,color:"#4B5568"}}>מאזן יומי</span>
+          <div style={{display:"flex",gap:12,fontSize:12,flexWrap:"wrap"}}>
+            <span>יעד: <strong style={{color:"#4ADE80"}}>{Math.round(eGoals.calories)}</strong></span>
             <span>נאכל: <strong style={{color:"#E2E8F0"}}>{Math.round(tot.calories)}</strong></span>
-            {workoutBonus>0 && <span>נשרף: <strong style={{color:"#F87171"}}>{workoutBonus}</strong></span>}
-            <span>נטו: <strong style={{color:netCal>eGoals.calories?"#F87171":netCal<eGoals.calories*0.8?"#60A5FA":"#4ADE80"}}>{Math.round(netCal)}</strong></span>
+            {eGoals._workoutBurned>0 && <span>שרפת: <strong style={{color:"#F87171"}}>{eGoals._workoutBurned}</strong></span>}
+            <span>גירעון: <strong style={{color:"#818CF8"}}>{Math.round((eGoals.calories-tot.calories)+eGoals._workoutBurned)}</strong></span>
           </div>
         </div>
       </Card>
@@ -1194,6 +1216,8 @@ function FitnessLog({ fitnessLog, setFitnessLog, weightLog, profile, stepsLog, s
   const [stepsInput,  setStepsInput]  = useState("");
   const [calMsg,      setCalMsg]      = useState("");
   const [calLoad,     setCalLoad]     = useState(false);
+  const [exSearch,    setExSearch]    = useState({}); // {idx: searchText}
+  const [showExList,  setShowExList]  = useState({}); // {idx: bool}
 
   const lw         = weightLog.at(-1)?.weight ?? profile.weight;
   const workouts   = fitnessLog[viewDate] || [];
@@ -1227,10 +1251,16 @@ function FitnessLog({ fitnessLog, setFitnessLog, weightLog, profile, stepsLog, s
   };
 
   const saveWorkout = () => {
-    if (!dur) return;
+    const effectiveDur = type==="walking" ? ws.dur : (parseInt(duration)||0);
+    if (type==="walking" && !effectiveDur) return;
+    const validExercises = exercises.filter(e=>e.name.trim());
+    // For strength: calories from sets/reps/weight formula (no duration needed)
+    const computedCal = type==="strength" && validExercises.length > 0
+      ? strengthCalories(validExercises)
+      : estCal;
     const w = {
-      id:Date.now(), date:viewDate, type, duration:dur, calories:estCal, notes, description:desc,
-      ...(type==="strength" && { exercises: exercises.filter(e=>e.name.trim()) }),
+      id:Date.now(), date:viewDate, type, duration:effectiveDur, calories:computedCal, notes, description:desc,
+      ...(type==="strength" && { exercises: validExercises }),
       ...(type==="swimming" && { laps:parseInt(laps)||null, swimStyle }),
       ...(type==="walking"  && { segments:walkSegs.filter(s=>s.dur), distance:ws.dist, steps:ws.steps, avgIncline:ws.avgInc, terrain }),
     };
@@ -1398,17 +1428,56 @@ function FitnessLog({ fitnessLog, setFitnessLog, weightLog, profile, stepsLog, s
             {/* STRENGTH */}
             {type==="strength" && (
               <div style={{marginBottom:14}}>
-                <div style={{fontSize:12,color:"#818CF8",fontWeight:700,marginBottom:8}}>💪 תרגילים</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:12,color:"#818CF8",fontWeight:700}}>💪 תרגילים</div>
+                  {exercises.filter(e=>e.name&&e.sets&&e.reps&&e.weight).length>0 && (
+                    <div style={{fontSize:11,color:"#F87171"}}>
+                      🔥 ~{strengthCalories(exercises.filter(e=>e.name))} קל׳ משוער
+                    </div>
+                  )}
+                </div>
                 {exercises.map((ex,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
-                    <TI value={ex.name}   placeholder="שם תרגיל"      onChange={e=>updEx(i,"name",e.target.value)}/>
-                    <TI value={ex.sets}   placeholder="סטים" type="number" onChange={e=>updEx(i,"sets",e.target.value)}/>
-                    <TI value={ex.reps}   placeholder="חזרות" type="number" onChange={e=>updEx(i,"reps",e.target.value)}/>
-                    <TI value={ex.weight} placeholder='ק"ג'  type="number" onChange={e=>updEx(i,"weight",e.target.value)}/>
-                    <button onClick={()=>remEx(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#374151",fontSize:18,padding:"4px",lineHeight:1,minWidth:32}}>×</button>
+                  <div key={i} style={{marginBottom:8}}>
+                    {/* Exercise name with dropdown */}
+                    <div style={{position:"relative",marginBottom:4}}>
+                      <TI value={ex.name}
+                        placeholder="שם תרגיל — הקלד לחיפוש"
+                        onChange={e=>{
+                          updEx(i,"name",e.target.value);
+                          setExSearch(s=>({...s,[i]:e.target.value}));
+                          setShowExList(s=>({...s,[i]:true}));
+                        }}
+                        onKeyDown={e=>{ if(e.key==="Escape") setShowExList(s=>({...s,[i]:false})); }}
+                        style={{paddingLeft:8}}/>
+                      {showExList[i] && ex.name.length >= 0 && (
+                        <div style={{position:"absolute",top:"100%",right:0,left:0,zIndex:50,background:"#1A1D27",border:"1px solid #2A2E42",borderRadius:8,maxHeight:160,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,0.4)"}}>
+                          {ALL_EXERCISES
+                            .filter(n=>n.toLowerCase().includes((ex.name||"").toLowerCase()))
+                            .slice(0,12)
+                            .map(name=>(
+                              <div key={name} onClick={()=>{
+                                updEx(i,"name",name);
+                                setShowExList(s=>({...s,[i]:false}));
+                              }} style={{padding:"8px 12px",fontSize:13,color:"#E2E8F0",cursor:"pointer",borderBottom:"1px solid #0D1117"}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#2A2E42"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                {name}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Sets / Reps / Weight */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:6,alignItems:"center"}}>
+                      <TI value={ex.sets}   placeholder="סטים"  type="number" onChange={e=>updEx(i,"sets",e.target.value)}/>
+                      <TI value={ex.reps}   placeholder="חזרות" type="number" onChange={e=>updEx(i,"reps",e.target.value)}/>
+                      <TI value={ex.weight} placeholder='ק"ג'   type="number" onChange={e=>updEx(i,"weight",e.target.value)}/>
+                      <button onClick={()=>remEx(i)} style={{background:"none",border:"none",cursor:"pointer",color:"#374151",fontSize:18,padding:"4px",lineHeight:1,minWidth:32}}>×</button>
+                    </div>
                   </div>
                 ))}
                 <Btn v="ghost" onClick={addEx} style={{fontSize:12,padding:"6px 12px"}}>+ תרגיל</Btn>
+                <div style={{fontSize:11,color:"#374151",marginTop:6}}>קלוריות מחושבות מסטים × חזרות × משקל (ללא צורך במשך אימון)</div>
               </div>
             )}
 
@@ -1510,7 +1579,7 @@ function FitnessLog({ fitnessLog, setFitnessLog, weightLog, profile, stepsLog, s
             )}
 
             <div style={{display:"flex",gap:8}}>
-              <Btn onClick={saveWorkout} disabled={!dur}>שמור אימון 💪</Btn>
+              <Btn onClick={saveWorkout} disabled={type==="walking"?!ws.dur:false}>שמור אימון 💪</Btn>
               <Btn v="ghost" onClick={resetForm}>בטל</Btn>
             </div>
           </Card>
