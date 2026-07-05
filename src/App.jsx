@@ -2070,7 +2070,6 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog, fitnessLog, s
       weekWorkouts:(()=>{const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return dateStr(d); }); return last7.flatMap(k=>(fitnessLog||{})[k]||[]).map(w=>({date:w.date,type:w.type,dur:w.duration,cal:w.calories}));})(),
       todaySteps:(stepsLog||{})[TODAY()]||0,
 
-      recentWeights:weightLog.slice(-7),
     };
     const reply = await chatCoach(updated.map(m=>({role:m.role,content:m.content})), ctx);
     const full  = [...updated, {role:"assistant",content:reply}];
