@@ -36,14 +36,30 @@ const EXERCISES = {
 };
 const ALL_EXERCISES = Object.values(EXERCISES).flat();
 
-// Estimate strength calories from sets/reps/weight (no duration needed)
-// ~0.1 kcal per kg lifted per rep + 30% overhead for rest/warmup
+// Reverse lookup: exercise name → category
+const EXERCISE_CATEGORY = {};
+Object.entries(EXERCISES).forEach(([cat, list]) => list.forEach(ex => EXERCISE_CATEGORY[ex] = cat));
+
+// MET multiplier per muscle group (legs burn more than arms)
+const CATEGORY_MET = {
+  "רגליים":   1.50,  // Squat, Deadlift — large muscle groups
+  "גב":       1.35,  // Rows, Pulldowns
+  "חזה":      1.25,  // Bench, Flyes
+  "כתפיים":   1.10,  // Press, Lateral raises
+  "ליבה":     1.00,  // Planks, Crunches
+  "ידיים":    0.85,  // Curls, Extensions — small muscles
+};
+
+// Estimate strength calories from sets/reps/weight
+// Uses category-specific MET multiplier (legs > back > chest > arms)
 const strengthCalories = (exercises) => {
-  const lifted = exercises.reduce((s,ex)=>{
+  const total = exercises.reduce((s,ex)=>{
     const w=parseFloat(ex.weight)||0, sets=parseInt(ex.sets)||0, reps=parseInt(ex.reps)||0;
-    return s + w*sets*reps*0.1;
+    const cat = EXERCISE_CATEGORY[ex.name];
+    const mult = cat ? (CATEGORY_MET[cat]||1.0) : 1.0;
+    return s + w*sets*reps*0.1*mult;
   }, 0);
-  return Math.round(lifted * 1.3) || 0;
+  return Math.round(total * 1.3) || 0;
 };
 
 // ══ Storage ════════════════════════════════════════════════════════════
@@ -300,6 +316,7 @@ ${workout.exercises?.length?"תרגילים: "+workout.exercises.map(e=>e.name).
 
 const chatCoach = async (messages, ctx) => {
   const wf = (ctx.weekWorkouts||[]).map(w=>w.type+' '+w.dur+'דקות '+w.cal+'קל').join(', ')||'לא תועדו';
+  const hist30 = (ctx.history30||[]).map(d=>d.date+': '+(d.workouts||[]).map(w=>w.type+' '+w.cal+'קל'+(w.ex?' ['+w.ex+']':'')).join(', ')).join('\n')||'אין';
   const tf = (ctx.todayFoods||[]).map(f=>f.name+(f.amount?' ('+f.amount+')':'')+': '+f.cal+'קל ח:'+f.pro+'g').join(' | ')||'טרם הוזנו';
   const w14 = (ctx.recentWeights||[]).slice(-5).map(w=>w.date.slice(5)+': '+w.weight+'kg').join(', ')||'לא תועד';
   const d7 = (ctx.last7days||[]).map(d=>d.date+': '+Math.round(d.total?.calories||0)+'קל ח:'+Math.round(d.total?.protein||0)+'g | '+(d.foods||[]).length+' ארוחות').join('\n');
@@ -330,6 +347,9 @@ ${d7}
 אימונים השבוע: ${wf}
 משקל 14 יום: ${w14}
 רצף: ${ctx.streak||0} ימים
+
+היסטוריית אימונים — 30 יום (סיכום):
+${hist30}
 
 דבר עברית. קצר וממוקד — עד 5 משפטים אלא אם ביקשו פירוט.`;
   return callClaude(messages, sys, true, 1000);
@@ -2069,6 +2089,17 @@ function ChatTab({ profile, goals, foodLog, setFoodLog, weightLog, fitnessLog, s
       recentWeights:weightLog.slice(-14),
       weekWorkouts:(()=>{const last7=Array.from({length:7},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return dateStr(d); }); return last7.flatMap(k=>(fitnessLog||{})[k]||[]).map(w=>({date:w.date,type:w.type,dur:w.duration,cal:w.calories}));})(),
       todaySteps:(stepsLog||{})[TODAY()]||0,
+      history30:(()=>{
+        return Array.from({length:30},(_,i)=>{
+          const d=new Date(); d.setDate(d.getDate()-i); const k=dateStr(d);
+          const ws=(fitnessLog||{})[k]||[];
+          if(!ws.length) return null;
+          return {date:k, workouts:ws.map(w=>({
+            type:w.type, cal:w.calories, dur:w.duration,
+            ex:(w.exercises||[]).slice(0,3).map(e=>e.name+(e.weight?' @'+e.weight+'kg':'')).join(', ')
+          }))};
+        }).filter(Boolean).reverse();
+      })(),
 
     };
     const reply = await chatCoach(updated.map(m=>({role:m.role,content:m.content})), ctx);
