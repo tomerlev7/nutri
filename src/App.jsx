@@ -27,12 +27,52 @@ const WORKOUT_TYPES = {
 const SWIM_STYLES = ["חופשי","חזה","גב","פרפר","מעורב"];
 
 const EXERCISES = {
-  "חזה": ["Bench Press","Chest Press","Incline Press","Push-up","Dumbbell Flyes","Cable Flyes","Pec Deck"],
-  "גב":  ["Deadlift","Pull-up","Lat Pulldown","Seated Row","Bent-over Row","T-Bar Row","Face Pull"],
-  "כתפיים": ["Overhead Press","Lateral Raise","Front Raise","Arnold Press","Rear Delt Fly","Shrugs"],
-  "ידיים": ["Bicep Curl","Hammer Curl","Preacher Curl","Tricep Extension","Skull Crusher","Dips","Close-grip Press"],
-  "רגליים": ["Squat","Hack Squat","Leg Press","Lunges","Leg Extension","Leg Curl","Calf Raise","Romanian Deadlift"],
-  "ליבה":  ["Plank","Crunches","Russian Twist","Leg Raise","Cable Crunch","Ab Rollout"],
+  "חזה": [
+    "Bench Press","Incline Bench Press","Decline Bench Press",
+    "Dumbbell Press","Incline Dumbbell Press","Decline Dumbbell Press",
+    "Chest Press Machine","Pec Deck","Cable Flyes","Dumbbell Flyes",
+    "Push-up","Wide Push-up","Diamond Push-up","Cable Crossover",
+    "Dips (Chest)","Svend Press",
+  ],
+  "גב": [
+    "Deadlift","Romanian Deadlift","Sumo Deadlift",
+    "Pull-up","Chin-up","Assisted Pull-up",
+    "Lat Pulldown","Close Grip Lat Pulldown","Straight Arm Pulldown",
+    "Seated Row","Cable Row","Single Arm Row","Bent-over Row",
+    "T-Bar Row","Chest Supported Row","Pendlay Row",
+    "Face Pull","Hyperextension","Good Morning",
+    "Shrugs","Rack Pull",
+  ],
+  "כתפיים": [
+    "Overhead Press","Dumbbell Shoulder Press","Arnold Press",
+    "Lateral Raise","Cable Lateral Raise","Machine Lateral Raise",
+    "Front Raise","Cable Front Raise",
+    "Rear Delt Fly","Cable Rear Delt Fly","Reverse Pec Deck",
+    "Upright Row","Cuban Press","Face Pull",
+  ],
+  "ידיים": [
+    "Bicep Curl","Dumbbell Curl","Barbell Curl","EZ Bar Curl",
+    "Hammer Curl","Preacher Curl","Concentration Curl","Cable Curl",
+    "Incline Dumbbell Curl","Spider Curl",
+    "Tricep Extension","Skull Crusher","Cable Pushdown",
+    "Overhead Tricep Extension","Dips (Triceps)","Close Grip Bench",
+    "Kickback","Rope Pushdown",
+  ],
+  "רגליים": [
+    "Squat","Back Squat","Front Squat","Goblet Squat","Pause Squat",
+    "Hack Squat","Leg Press","Bulgarian Split Squat","Split Squat",
+    "Lunges","Walking Lunges","Reverse Lunge","Lateral Lunge",
+    "Romanian Deadlift","Leg Curl","Lying Leg Curl","Seated Leg Curl",
+    "Leg Extension","Calf Raise","Seated Calf Raise","Donkey Calf Raise",
+    "Hip Thrust","Glute Bridge","Step Up","Box Jump",
+  ],
+  "ליבה": [
+    "Plank","Side Plank","Hollow Hold",
+    "Crunches","Bicycle Crunches","Reverse Crunches",
+    "Leg Raise","Hanging Leg Raise","Dragon Flag",
+    "Russian Twist","Cable Crunch","Ab Rollout","Pallof Press",
+    "Dead Bug","Bird Dog","McGill Curl Up",
+  ],
 };
 const ALL_EXERCISES = Object.values(EXERCISES).flat();
 
